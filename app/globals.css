@@ -1575,6 +1575,10 @@ tbody tr:hover td {
   font-variant-numeric: tabular-nums;
 }
 
+.clickable-chart-bar .recharts-rectangle {
+  cursor: pointer;
+}
+
 .empty-chart {
   height: 100%;
   color: var(--muted);

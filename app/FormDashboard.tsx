@@ -41,8 +41,10 @@ import {
   FormRecord,
   FormReport,
   attentionItems,
+  compareFloors,
   formSummary,
   parseFormReportFile,
+  workedFloors,
 } from "./form-report-model";
 
 type PeriodFilter = "all" | "7" | "30" | "90";
@@ -270,7 +272,7 @@ export function FormDashboard({ onBack }: { onBack?: () => void }) {
 
   const records = useMemo(() => report?.records ?? [], [report]);
   const workers = useMemo(() => [...new Set(records.map((record) => record.worker))].sort(), [records]);
-  const floors = useMemo(() => [...new Set(records.map((record) => record.floor))].sort(), [records]);
+  const floors = useMemo(() => [...new Set(records.flatMap(workedFloors))].sort(compareFloors), [records]);
   const cleaningTypes = useMemo(() => [...new Set(records.map((record) => record.cleaningType))].sort(), [records]);
   const latestTimestamp = useMemo(() => Math.max(...records.map((record) => record.startedTimestamp), 0), [records]);
 
@@ -280,11 +282,11 @@ export function FormDashboard({ onBack }: { onBack?: () => void }) {
     return records.filter((record) => {
       if (cutoff && record.startedTimestamp < cutoff) return false;
       if (worker !== "all" && record.worker !== worker) return false;
-      if (floor !== "all" && record.floor !== floor) return false;
+      if (floor !== "all" && !workedFloors(record).includes(floor)) return false;
       if (cleaningType !== "all" && record.cleaningType !== cleaningType) return false;
       if (attentionOnly && attentionItems(record).length === 0) return false;
       if (!normalizedQuery) return true;
-      return [record.worker, record.floor, record.cleaningType, record.extraFloor, ...record.tasks]
+      return [record.worker, ...workedFloors(record), record.cleaningType, ...record.tasks]
         .join(" ")
         .toLowerCase()
         .includes(normalizedQuery);
@@ -293,7 +295,7 @@ export function FormDashboard({ onBack }: { onBack?: () => void }) {
 
   const summary = useMemo(() => formSummary(filteredRecords), [filteredRecords]);
   const employeeData = useMemo(() => ranked(filteredRecords.map((record) => record.worker), 10), [filteredRecords]);
-  const floorData = useMemo(() => ranked(filteredRecords.map((record) => record.floor)), [filteredRecords]);
+  const floorData = useMemo(() => ranked(filteredRecords.flatMap(workedFloors)).sort((a, b) => compareFloors(a.name, b.name)), [filteredRecords]);
   const cleaningTypeData = useMemo(() => ranked(filteredRecords.map((record) => record.cleaningType)), [filteredRecords]);
   const taskData = useMemo(() => ranked(filteredRecords.flatMap((record) => record.tasks), 10), [filteredRecords]);
   const issueData = useMemo(() => ranked(filteredRecords.flatMap(attentionItems)), [filteredRecords]);
@@ -407,7 +409,7 @@ export function FormDashboard({ onBack }: { onBack?: () => void }) {
             </label>
             <label className="select-field">
               <select value={floor} onChange={(event) => { setFloor(event.target.value); setPage(1); }} aria-label="Давхраар шүүх">
-                <option value="all">Бүх давхар</option>{floors.map((name) => <option key={name} value={name}>{name}</option>)}
+                <option value="all">Бүх ажилласан давхар</option>{floors.map((name) => <option key={name} value={name}>{name}</option>)}
               </select><ChevronDown size={16} aria-hidden="true" />
             </label>
             <label className="select-field">
@@ -458,14 +460,24 @@ export function FormDashboard({ onBack }: { onBack?: () => void }) {
                 </ResponsiveContainer>
               </ChartPanel>
 
-              <ChartPanel eyebrow="ДАВХАР" title="Үндсэн ажлын байршил">
+              <ChartPanel eyebrow="ДАВХАР" title="Ажилласан давхрын бүртгэл">
                 <ResponsiveContainer width="100%" height="100%">
                   <BarChart data={floorData} margin={{ top: 8, right: 8, left: -12, bottom: 0 }}>
                     <CartesianGrid stroke="#e4eae6" vertical={false} />
                     <XAxis dataKey="name" tick={{ fontSize: 10, fill: "#657169" }} tickLine={false} axisLine={false} />
                     <YAxis allowDecimals={false} tick={{ fontSize: 10, fill: "#657169" }} tickLine={false} axisLine={false} />
                     <Tooltip cursor={{ fill: "#f2f5f2" }} contentStyle={{ border: "1px solid #d9e0dc", borderRadius: 6, fontSize: 12 }} />
-                    <Bar dataKey="value" name="Бүртгэл" fill="#0d6b45" radius={[3, 3, 0, 0]} />
+                    <Bar
+                      className="clickable-chart-bar"
+                      dataKey="value"
+                      name="Бүртгэл"
+                      fill="#0d6b45"
+                      radius={[3, 3, 0, 0]}
+                      onClick={(entry) => {
+                        const selectedFloor = (entry as { payload?: ChartDatum }).payload?.name;
+                        if (selectedFloor) { setFloor(selectedFloor); setPage(1); }
+                      }}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </ChartPanel>

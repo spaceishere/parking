@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import XLSX from "xlsx";
-import { attentionItems, formSummary, parseFormReportFile } from "../app/form-report-model.ts";
+import { attentionItems, formSummary, parseFormReportFile, workedFloors } from "../app/form-report-model.ts";
 
 const headers = [
   "ID",
@@ -49,6 +49,7 @@ test("parses and summarizes a Forms control workbook", async () => {
   assert.equal(summary.partialCleaning, 1);
   assert.equal(summary.safetyNo, 1);
   assert.equal(summary.attentionRecords, 1);
+  assert.deepEqual(workedFloors(report.records[0]), ["1-р давхар", "3-р давхар"]);
   assert.deepEqual(attentionItems(report.records[1]), [
     "ХАБЭА заавар",
     "00 цаас дууссан",

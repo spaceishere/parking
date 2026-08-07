@@ -188,6 +188,20 @@ export function attentionItems(record: FormRecord) {
   return items;
 }
 
+export function workedFloors(record: FormRecord) {
+  return [...new Set([
+    record.floor,
+    record.extraFloor,
+    ...record.taskGroups.map((group) => group.floor),
+  ].filter(Boolean))];
+}
+
+export function compareFloors(a: string, b: string) {
+  const aNumber = Number(a.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
+  const bNumber = Number(b.match(/\d+/)?.[0] ?? Number.MAX_SAFE_INTEGER);
+  return aNumber - bNumber || a.localeCompare(b);
+}
+
 export function formSummary(records: FormRecord[]): FormSummary {
   const safetyYes = records.filter((record) => normalizeYesNo(record.safety) === "Тийм").length;
   const safetyNo = records.filter((record) => normalizeYesNo(record.safety) === "Үгүй").length;
