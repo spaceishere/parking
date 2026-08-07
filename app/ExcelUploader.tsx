@@ -591,7 +591,7 @@ function AuditView({
   );
 }
 
-export function ExcelUploader() {
+export function ExcelUploader({ onBack }: { onBack?: () => void }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [reports, setReports] = useState<Reports>({});
   const [isDragging, setIsDragging] = useState(false);
@@ -668,10 +668,10 @@ export function ExcelUploader() {
   return (
     <main className="app-shell">
       <header className="topbar">
-        <a className="brand" href="#main" aria-label="Зогсоолын хяналтын нүүр">
+        <button className="brand brand-button" type="button" onClick={onBack} aria-label="Тайлангийн сонголт руу буцах">
           <span className="brand-mark" aria-hidden="true">P</span>
           <span><strong>Зогсоолын хяналт</strong><small>UB Parking тайлан шалгах</small></span>
-        </a>
+        </button>
         {ready ? (
           <div className="topbar-actions">
             <span className="period-label"><Clock3 size={15} />{registryReport?.startDate} – {registryReport?.endDate}</span>

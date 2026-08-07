@@ -1,5 +1,5 @@
-import { ExcelUploader } from "./ExcelUploader";
+import { OperationsPortal } from "./OperationsPortal";
 
 export default function Home() {
-  return <ExcelUploader />;
+  return <OperationsPortal />;
 }

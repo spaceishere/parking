@@ -13,17 +13,17 @@ async function render() {
   );
 }
 
-test("server-renders the two-report upload workspace", async () => {
+test("server-renders the report type chooser", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Зогсоолын хяналт \| UB Parking тайлан<\/title>/i);
-  assert.match(html, /UB Parking тайлангаа шалгах/);
-  assert.match(html, /Нийт бүртгэл тайлан/);
-  assert.match(html, /Өдөр тутмын тайлан/);
-  assert.match(html, /multiple=""/);
-  assert.match(html, /\.xlsx,\.xls/);
+  assert.match(html, /<title>Хяналтын төв \| Excel тайлан<\/title>/i);
+  assert.match(html, /Аль тайлангаа шалгах вэ\?/);
+  assert.match(html, /Parking/);
+  assert.match(html, /Зогсоолын тайлан/);
+  assert.match(html, /Form/);
+  assert.match(html, /Өдөр тутмын хяналт/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });

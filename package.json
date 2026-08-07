@@ -12,7 +12,7 @@
     "dev:vercel": "next dev",
     "build:vercel": "next build",
     "start:vercel": "next start",
-    "test": "npm run build && node --test tests/rendered-html.test.mjs",
+    "test": "npm run build && node --experimental-strip-types --test tests/*.test.mjs",
     "lint": "eslint . --ignore-pattern dist --ignore-pattern .next",
     "db:generate": "drizzle-kit generate"
   },
@@ -22,6 +22,7 @@
     "next": "^16.2.6",
     "react": "19.2.6",
     "react-dom": "19.2.6",
+    "recharts": "^3.10.1",
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
