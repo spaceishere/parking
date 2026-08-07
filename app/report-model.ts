@@ -188,8 +188,10 @@ function metadataValue(rows: CellData[][], label: string) {
 }
 
 export async function parseReportFile(file: File): Promise<ParsedReport> {
-  const xlsxModule = await import("xlsx");
-  const XLSX = ("read" in xlsxModule ? xlsxModule : xlsxModule.default) as XlsxApi;
+  const xlsxModule = (await import("xlsx")) as unknown as {
+    default?: XlsxApi;
+  } & Partial<XlsxApi>;
+  const XLSX = (xlsxModule.default ?? xlsxModule) as XlsxApi;
   const buffer = await file.arrayBuffer();
   const workbook = XLSX.read(buffer, {
     type: "array",
