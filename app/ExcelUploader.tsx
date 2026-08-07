@@ -40,6 +40,8 @@ import {
   RegistryStats,
   ReportType,
   dailySummary,
+  isContractRecord,
+  isHourlyRecord,
   meaningful,
   parseReportFile,
   registryRecords,
@@ -64,6 +66,7 @@ type FilterKey =
   | "duplicate-transaction"
   | "open";
 type SortKey = "newest" | "duration" | "amount";
+type CustomerTypeFilter = "all" | "hourly" | "contract";
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024;
 const PAGE_SIZE = 50;
@@ -127,6 +130,7 @@ function displayDate(value: string) {
 function recordStatus(record: RegistryRecord) {
   if (!meaningful(record.exitedAt)) return { label: "Гараагүй", tone: "blue" };
   if (record.paidAmount > 0) return { label: "Төлсөн", tone: "green" };
+  if (isContractRecord(record)) return { label: "Гэрээгээр", tone: "blue" };
   if (record.minutes < 30) return { label: "30 мин дотор", tone: "neutral" };
   if (Math.max(record.calculatedAmount, record.dueAmount) > 0) {
     return { label: "Төлбөргүй", tone: "red" };
@@ -135,26 +139,25 @@ function recordStatus(record: RegistryRecord) {
 }
 
 function vehicleType(record: RegistryRecord) {
-  const normalized = record.customerType.trim().toLowerCase();
-  if (normalized.startsWith("гэрээ")) return { label: "Гэрээт", tone: "contract" };
-  if (normalized.startsWith("цаг")) return { label: "Цагийн", tone: "hourly" };
+  if (isContractRecord(record)) return { label: "Гэрээт", tone: "contract" };
+  if (isHourlyRecord(record)) return { label: "Цагийн", tone: "hourly" };
   return { label: record.customerType || "Тодорхойгүй", tone: "other" };
 }
 
 function matchesFilter(record: RegistryRecord, filter: FilterKey, duplicateTransactions = new Set<string>()) {
   switch (filter) {
     case "hourly":
-      return record.customerType.trim().toLowerCase().startsWith("цаг");
+      return isHourlyRecord(record);
     case "contract":
-      return record.customerType.trim().toLowerCase().startsWith("гэрээ");
+      return isContractRecord(record);
     case "paid":
       return record.paidAmount > 0;
     case "free-under-30":
-      return record.minutes < 30 && record.paidAmount <= 0;
+      return isHourlyRecord(record) && record.minutes < 30 && record.paidAmount <= 0;
     case "free-over-30":
-      return record.minutes >= 30 && record.paidAmount <= 0;
+      return isHourlyRecord(record) && record.minutes >= 30 && record.paidAmount <= 0;
     case "expected-unpaid":
-      return Math.max(record.calculatedAmount, record.dueAmount) > 0 && record.paidAmount <= 0;
+      return isHourlyRecord(record) && Math.max(record.calculatedAmount, record.dueAmount) > 0 && record.paidAmount <= 0;
     case "manual-entry":
       return meaningful(record.manualEntryUser) || meaningful(record.manualEntryNote);
     case "manual-exit":
@@ -234,8 +237,13 @@ function RegistryTable({
   selectedFilter: FilterKey;
   onSelect: (record: RegistryRecord) => void;
 }) {
+  const lockedCustomerType: Exclude<CustomerTypeFilter, "all"> | null = selectedFilter === "contract"
+    ? "contract"
+    : ["hourly", "free-under-30", "free-over-30", "expected-unpaid"].includes(selectedFilter)
+      ? "hourly"
+      : null;
   const [query, setQuery] = useState("");
-  const [customerType, setCustomerType] = useState("all");
+  const [customerType, setCustomerType] = useState<CustomerTypeFilter>(lockedCustomerType ?? "all");
   const [paymentType, setPaymentType] = useState("all");
   const [sort, setSort] = useState<SortKey>("newest");
   const [page, setPage] = useState(1);
@@ -252,14 +260,15 @@ function RegistryTable({
     });
     return new Set([...counts.entries()].filter(([, count]) => count > 1).map(([transaction]) => transaction));
   }, [records]);
+  const effectiveCustomerType = lockedCustomerType ?? customerType;
 
   const filtered = useMemo(() => {
     const normalizedQuery = query.trim().toLowerCase();
     return records
       .filter((record) => matchesFilter(record, selectedFilter, duplicateTransactions))
       .filter((record) => {
-        if (customerType === "hourly") return record.customerType.trim().toLowerCase().startsWith("цаг");
-        if (customerType === "contract") return record.customerType.trim().toLowerCase().startsWith("гэрээ");
+        if (effectiveCustomerType === "hourly") return isHourlyRecord(record);
+        if (effectiveCustomerType === "contract") return isContractRecord(record);
         return true;
       })
       .filter((record) => paymentType === "all" || record.paymentType === paymentType)
@@ -275,7 +284,7 @@ function RegistryTable({
         if (sort === "amount") return b.paidAmount - a.paidAmount;
         return b.enteredAt.localeCompare(a.enteredAt);
       });
-  }, [records, selectedFilter, duplicateTransactions, customerType, paymentType, query, sort]);
+  }, [records, selectedFilter, duplicateTransactions, effectiveCustomerType, paymentType, query, sort]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -307,7 +316,12 @@ function RegistryTable({
           )}
         </label>
         <label className="select-field">
-          <select value={customerType} onChange={(event) => { setCustomerType(event.target.value); setPage(1); }} aria-label="Машины төрлөөр шүүх">
+          <select
+            value={effectiveCustomerType}
+            disabled={Boolean(lockedCustomerType)}
+            onChange={(event) => { setCustomerType(event.target.value as CustomerTypeFilter); setPage(1); }}
+            aria-label="Машины төрлөөр шүүх"
+          >
             <option value="all">Бүх машины төрөл</option>
             <option value="hourly">Цагийн төлбөртэй</option>
             <option value="contract">Гэрээт машин</option>
@@ -532,9 +546,9 @@ function AuditView({
   const countDifference = stats.paidVisits - daily.paidCount;
   const reconciled = Math.abs(amountDifference) < 1 && countDifference === 0 && samePeriod;
   const checks: Array<{ label: string; value: number; filter: FilterKey; tone: string; note: string }> = [
-    { label: "30 мин хүрээгүй, төлбөргүй", value: stats.freeUnder30, filter: "free-under-30", tone: "neutral", note: "Мэдээллийн жагсаалт" },
-    { label: "30+ мин, төлбөргүй", value: stats.freeOver30, filter: "free-over-30", tone: "warning", note: "Хугацаа хэтэрсэн эсэхийг шалгана" },
-    { label: "Төлбөр бодогдсон ч төлөөгүй", value: stats.expectedButUnpaid, filter: "expected-unpaid", tone: "danger", note: "Тооцоолсон дүн 0-ээс их" },
+    { label: "30 мин хүрээгүй, төлбөргүй", value: stats.freeUnder30, filter: "free-under-30", tone: "neutral", note: "Зөвхөн цагийн машин" },
+    { label: "30+ мин, төлбөргүй", value: stats.freeOver30, filter: "free-over-30", tone: "warning", note: "Зөвхөн цагийн машин" },
+    { label: "Төлбөр бодогдсон ч төлөөгүй", value: stats.expectedButUnpaid, filter: "expected-unpaid", tone: "danger", note: "Зөвхөн цагийн машин" },
     { label: "Гараар оруулсан", value: stats.manualEntries, filter: "manual-entry", tone: "blue", note: "Хэрэглэгч эсвэл тайлбартай" },
     { label: "Гараар гаргасан", value: stats.manualExits, filter: "manual-exit", tone: "blue", note: "Хэрэглэгч, төрөл, тайлбартай" },
     { label: "Дугаар зассан", value: stats.plateCorrections, filter: "plate-correction", tone: "blue", note: "Засалтын мөрүүд" },
@@ -714,8 +728,8 @@ export function ExcelUploader() {
                 <MetricCard label="Цагийн төлбөртэй" value={formatCount(stats.hourlyVisits)} note="Үйлчлүүлэгчийн төрөл: Цаг" icon={<Clock3 size={21} />} onClick={() => openFiltered("hourly")} active={filter === "hourly"} />
                 <MetricCard label="Гэрээт машин" value={formatCount(stats.contractVisits)} note="Үйлчлүүлэгчийн төрөл: Гэрээ" icon={<FileCheck2 size={21} />} tone="blue" onClick={() => openFiltered("contract")} active={filter === "contract"} />
                 <MetricCard label="Нийт төлсөн" value={formatCurrency(stats.totalRevenue)} note={`${formatCount(stats.paidVisits)} төлөлт`} icon={<BadgeDollarSign size={21} />} tone="success" onClick={() => openFiltered("paid")} active={filter === "paid"} />
-                <MetricCard label="30 мин хүрээгүй" value={formatCount(stats.freeUnder30)} note="Төлбөргүй гарсан" icon={<Timer size={21} />} onClick={() => openFiltered("free-under-30")} active={filter === "free-under-30"} />
-                <MetricCard label="30+ мин төлбөргүй" value={formatCount(stats.freeOver30)} note="Шалгах жагсаалт" icon={<CircleAlert size={21} />} tone="warning" onClick={() => openFiltered("free-over-30")} active={filter === "free-over-30"} />
+                <MetricCard label="30 мин хүрээгүй" value={formatCount(stats.freeUnder30)} note="Цагийн машин, төлбөргүй" icon={<Timer size={21} />} onClick={() => openFiltered("free-under-30")} active={filter === "free-under-30"} />
+                <MetricCard label="30+ мин төлбөргүй" value={formatCount(stats.freeOver30)} note="Зөвхөн цагийн машин" icon={<CircleAlert size={21} />} tone="warning" onClick={() => openFiltered("free-over-30")} active={filter === "free-over-30"} />
                 <MetricCard label="Гараар гаргасан" value={formatCount(stats.manualExits)} note="Тайлбартай мөр" icon={<Wrench size={21} />} tone="blue" onClick={() => openFiltered("manual-exit")} active={filter === "manual-exit"} />
                 <MetricCard label="Зураг дутуу" value={formatCount(stats.missingExitImage)} note="Гарах үеийн зураг" icon={<CameraOff size={21} />} tone="danger" onClick={() => openFiltered("missing-image")} active={filter === "missing-image"} />
               </section>

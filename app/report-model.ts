@@ -90,6 +90,18 @@ type XlsxApi = typeof import("xlsx");
 
 const text = (value: CellData | undefined) => value?.display.trim() ?? "";
 
+function normalizedCustomerType(record: Pick<RegistryRecord, "customerType">) {
+  return record.customerType.trim().toLowerCase();
+}
+
+export function isHourlyRecord(record: Pick<RegistryRecord, "customerType">) {
+  return normalizedCustomerType(record).startsWith("цаг");
+}
+
+export function isContractRecord(record: Pick<RegistryRecord, "customerType">) {
+  return normalizedCustomerType(record).startsWith("гэрээ");
+}
+
 export function number(value: CellData | undefined) {
   if (!value) return 0;
   if (typeof value.raw === "number" && Number.isFinite(value.raw)) return value.raw;
@@ -328,15 +340,16 @@ export function registryStats(records: RegistryRecord[]): RegistryStats {
   });
 
   const totalMinutes = records.reduce((sum, record) => sum + record.minutes, 0);
+  const hourlyRecords = records.filter(isHourlyRecord);
   return {
     totalVisits: records.length,
-    hourlyVisits: records.filter((record) => record.customerType.trim().toLowerCase().startsWith("цаг")).length,
-    contractVisits: records.filter((record) => record.customerType.trim().toLowerCase().startsWith("гэрээ")).length,
+    hourlyVisits: hourlyRecords.length,
+    contractVisits: records.filter(isContractRecord).length,
     totalRevenue: records.reduce((sum, record) => sum + record.paidAmount, 0),
     paidVisits: records.filter((record) => record.paidAmount > 0).length,
-    freeUnder30: records.filter((record) => record.minutes < 30 && record.paidAmount <= 0).length,
-    freeOver30: records.filter((record) => record.minutes >= 30 && record.paidAmount <= 0).length,
-    expectedButUnpaid: records.filter(
+    freeUnder30: hourlyRecords.filter((record) => record.minutes < 30 && record.paidAmount <= 0).length,
+    freeOver30: hourlyRecords.filter((record) => record.minutes >= 30 && record.paidAmount <= 0).length,
+    expectedButUnpaid: hourlyRecords.filter(
       (record) => Math.max(record.calculatedAmount, record.dueAmount) > 0 && record.paidAmount <= 0,
     ).length,
     manualEntries: records.filter(
