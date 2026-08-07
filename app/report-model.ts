@@ -70,6 +70,8 @@ export type DailySummary = {
 
 export type RegistryStats = {
   totalVisits: number;
+  hourlyVisits: number;
+  contractVisits: number;
   totalRevenue: number;
   paidVisits: number;
   freeUnder30: number;
@@ -328,6 +330,8 @@ export function registryStats(records: RegistryRecord[]): RegistryStats {
   const totalMinutes = records.reduce((sum, record) => sum + record.minutes, 0);
   return {
     totalVisits: records.length,
+    hourlyVisits: records.filter((record) => record.customerType.trim().toLowerCase().startsWith("цаг")).length,
+    contractVisits: records.filter((record) => record.customerType.trim().toLowerCase().startsWith("гэрээ")).length,
     totalRevenue: records.reduce((sum, record) => sum + record.paidAmount, 0),
     paidVisits: records.filter((record) => record.paidAmount > 0).length,
     freeUnder30: records.filter((record) => record.minutes < 30 && record.paidAmount <= 0).length,

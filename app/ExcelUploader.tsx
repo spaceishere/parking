@@ -51,6 +51,8 @@ type Reports = Partial<Record<ReportType, ParsedReport>>;
 type View = "registry" | "daily" | "audit";
 type FilterKey =
   | "all"
+  | "hourly"
+  | "contract"
   | "paid"
   | "free-under-30"
   | "free-over-30"
@@ -74,6 +76,8 @@ const currencyFormatter = new Intl.NumberFormat("mn-MN", {
 
 const FILTER_LABELS: Record<FilterKey, string> = {
   all: "Бүх бүртгэл",
+  hourly: "Цагийн төлбөртэй машин",
+  contract: "Гэрээт машин",
   paid: "Төлбөр төлсөн",
   "free-under-30": "30 мин хүрээгүй, төлбөргүй",
   "free-over-30": "30+ мин, төлбөргүй",
@@ -130,8 +134,19 @@ function recordStatus(record: RegistryRecord) {
   return { label: "30+ мин төлбөргүй", tone: "yellow" };
 }
 
+function vehicleType(record: RegistryRecord) {
+  const normalized = record.customerType.trim().toLowerCase();
+  if (normalized.startsWith("гэрээ")) return { label: "Гэрээт", tone: "contract" };
+  if (normalized.startsWith("цаг")) return { label: "Цагийн", tone: "hourly" };
+  return { label: record.customerType || "Тодорхойгүй", tone: "other" };
+}
+
 function matchesFilter(record: RegistryRecord, filter: FilterKey, duplicateTransactions = new Set<string>()) {
   switch (filter) {
+    case "hourly":
+      return record.customerType.trim().toLowerCase().startsWith("цаг");
+    case "contract":
+      return record.customerType.trim().toLowerCase().startsWith("гэрээ");
     case "paid":
       return record.paidAmount > 0;
     case "free-under-30":
@@ -220,6 +235,7 @@ function RegistryTable({
   onSelect: (record: RegistryRecord) => void;
 }) {
   const [query, setQuery] = useState("");
+  const [customerType, setCustomerType] = useState("all");
   const [paymentType, setPaymentType] = useState("all");
   const [sort, setSort] = useState<SortKey>("newest");
   const [page, setPage] = useState(1);
@@ -241,6 +257,11 @@ function RegistryTable({
     const normalizedQuery = query.trim().toLowerCase();
     return records
       .filter((record) => matchesFilter(record, selectedFilter, duplicateTransactions))
+      .filter((record) => {
+        if (customerType === "hourly") return record.customerType.trim().toLowerCase().startsWith("цаг");
+        if (customerType === "contract") return record.customerType.trim().toLowerCase().startsWith("гэрээ");
+        return true;
+      })
       .filter((record) => paymentType === "all" || record.paymentType === paymentType)
       .filter((record) => {
         if (!normalizedQuery) return true;
@@ -254,7 +275,7 @@ function RegistryTable({
         if (sort === "amount") return b.paidAmount - a.paidAmount;
         return b.enteredAt.localeCompare(a.enteredAt);
       });
-  }, [records, selectedFilter, duplicateTransactions, paymentType, query, sort]);
+  }, [records, selectedFilter, duplicateTransactions, customerType, paymentType, query, sort]);
 
   const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const safePage = Math.min(page, pageCount);
@@ -286,6 +307,14 @@ function RegistryTable({
           )}
         </label>
         <label className="select-field">
+          <select value={customerType} onChange={(event) => { setCustomerType(event.target.value); setPage(1); }} aria-label="Машины төрлөөр шүүх">
+            <option value="all">Бүх машины төрөл</option>
+            <option value="hourly">Цагийн төлбөртэй</option>
+            <option value="contract">Гэрээт машин</option>
+          </select>
+          <ChevronDown size={16} aria-hidden="true" />
+        </label>
+        <label className="select-field">
           <select value={paymentType} onChange={(event) => { setPaymentType(event.target.value); setPage(1); }} aria-label="Төлбөрийн төрлөөр шүүх">
             <option value="all">Бүх төлбөрийн төрөл</option>
             {paymentTypes.map((method) => <option key={method} value={method}>{method}</option>)}
@@ -308,6 +337,7 @@ function RegistryTable({
             <thead>
               <tr>
                 <th>Машины дугаар</th>
+                <th>Машины төрөл</th>
                 <th>Төлөв</th>
                 <th>Орсон</th>
                 <th>Гарсан</th>
@@ -322,9 +352,11 @@ function RegistryTable({
             <tbody>
               {pageRows.map((record) => {
                 const status = recordStatus(record);
+                const type = vehicleType(record);
                 return (
                   <tr key={record.id}>
                     <td><button className="plate-button" type="button" onClick={() => onSelect(record)}>{record.plate || "Дугааргүй"}</button></td>
+                    <td><span className={`vehicle-type-chip ${type.tone}`}>{type.label}</span></td>
                     <td><span className={`status-chip ${status.tone}`}>{status.label}</span></td>
                     <td>{displayDate(record.enteredAt)}</td>
                     <td>{displayDate(record.exitedAt)}</td>
@@ -342,7 +374,7 @@ function RegistryTable({
                 );
               })}
               {pageRows.length === 0 && (
-                <tr><td className="empty-row" colSpan={10}>Энэ шүүлтэд тохирох бүртгэл олдсонгүй.</td></tr>
+                <tr><td className="empty-row" colSpan={11}>Энэ шүүлтэд тохирох бүртгэл олдсонгүй.</td></tr>
               )}
             </tbody>
           </table>
@@ -372,6 +404,7 @@ function RecordDrawer({ record, report, onClose }: { record: RegistryRecord; rep
     { label: "Гарах үеийн дугаар", url: record.exitPlateImage },
   ];
   const status = recordStatus(record);
+  const type = vehicleType(record);
 
   return (
     <div className="drawer-backdrop" role="presentation">
@@ -380,6 +413,7 @@ function RecordDrawer({ record, report, onClose }: { record: RegistryRecord; rep
           <div>
             <p className="eyebrow">БҮРТГЭЛИЙН ДЭЛГЭРЭНГҮЙ</p>
             <h2>{record.plate || "Дугааргүй машин"}</h2>
+            <span className={`vehicle-type-chip ${type.tone}`}>{type.label}</span>
             <span className={`status-chip ${status.tone}`}>{status.label}</span>
           </div>
           <button className="icon-button" type="button" onClick={onClose} title="Хаах" aria-label="Дэлгэрэнгүйг хаах"><X size={19} /></button>
@@ -675,8 +709,10 @@ export function ExcelUploader() {
 
           {activeView === "registry" && registryReport && (
             <div className="view-stack">
-              <section className="metrics-grid six">
+              <section className="metrics-grid eight">
                 <MetricCard label="Нийт машин" value={formatCount(stats.totalVisits)} note={`Дундаж ${formatDuration(stats.averageMinutes)}`} icon={<CarFront size={21} />} onClick={() => openFiltered("all")} active={filter === "all"} />
+                <MetricCard label="Цагийн төлбөртэй" value={formatCount(stats.hourlyVisits)} note="Үйлчлүүлэгчийн төрөл: Цаг" icon={<Clock3 size={21} />} onClick={() => openFiltered("hourly")} active={filter === "hourly"} />
+                <MetricCard label="Гэрээт машин" value={formatCount(stats.contractVisits)} note="Үйлчлүүлэгчийн төрөл: Гэрээ" icon={<FileCheck2 size={21} />} tone="blue" onClick={() => openFiltered("contract")} active={filter === "contract"} />
                 <MetricCard label="Нийт төлсөн" value={formatCurrency(stats.totalRevenue)} note={`${formatCount(stats.paidVisits)} төлөлт`} icon={<BadgeDollarSign size={21} />} tone="success" onClick={() => openFiltered("paid")} active={filter === "paid"} />
                 <MetricCard label="30 мин хүрээгүй" value={formatCount(stats.freeUnder30)} note="Төлбөргүй гарсан" icon={<Timer size={21} />} onClick={() => openFiltered("free-under-30")} active={filter === "free-under-30"} />
                 <MetricCard label="30+ мин төлбөргүй" value={formatCount(stats.freeOver30)} note="Шалгах жагсаалт" icon={<CircleAlert size={21} />} tone="warning" onClick={() => openFiltered("free-over-30")} active={filter === "free-over-30"} />
