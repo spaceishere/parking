@@ -13,9 +13,9 @@ const geistMono = Geist_Mono({
   subsets: ["latin"],
 });
 
-const title = "Зогсоолын тайлан | Excel мэдээлэл харах";
+const title = "Зогсоолын хяналт | UB Parking тайлан";
 const description =
-  "UB Parking Excel тайланг төхөөрөмж дээрээ аюулгүй нээж, мэдээллийг шалгах хэрэгсэл.";
+  "UB Parking-ийн нийт бүртгэл болон өдөр тутмын Excel тайланг тулгаж, төлбөр болон машины бүртгэлийг шалгах хэрэгсэл.";
 
 export async function generateMetadata(): Promise<Metadata> {
   const requestHeaders = await headers();
@@ -35,7 +35,7 @@ export async function generateMetadata(): Promise<Metadata> {
       title,
       description,
       type: "website",
-      images: [{ url: imageUrl, width: 1672, height: 941, alt: "Зогсоолын тайлангийн Excel upload дэлгэц" }],
+      images: [{ url: imageUrl, width: 1672, height: 941, alt: "UB Parking Excel тайлан шалгах дэлгэц" }],
     },
     twitter: {
       card: "summary_large_image",

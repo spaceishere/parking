@@ -13,15 +13,17 @@ async function render() {
   );
 }
 
-test("server-renders the Excel upload workspace", async () => {
+test("server-renders the two-report upload workspace", async () => {
   const response = await render();
   assert.equal(response.status, 200);
   assert.match(response.headers.get("content-type") ?? "", /^text\/html\b/i);
 
   const html = await response.text();
-  assert.match(html, /<title>Зогсоолын тайлан \| Excel мэдээлэл харах<\/title>/i);
-  assert.match(html, /Excel тайлангаа оруулна уу/);
-  assert.match(html, /Excel файл сонгох/);
-  assert.match(html, /\.xlsx,\.xls,\.csv/);
+  assert.match(html, /<title>Зогсоолын хяналт \| UB Parking тайлан<\/title>/i);
+  assert.match(html, /UB Parking тайлангаа шалгах/);
+  assert.match(html, /Нийт бүртгэл тайлан/);
+  assert.match(html, /Өдөр тутмын тайлан/);
+  assert.match(html, /multiple=""/);
+  assert.match(html, /\.xlsx,\.xls/);
   assert.doesNotMatch(html, /codex-preview|react-loading-skeleton|Your site is taking shape/i);
 });
