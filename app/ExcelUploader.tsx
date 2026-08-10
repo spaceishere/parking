@@ -305,40 +305,99 @@ function RegistryTable({
           ? "Гэрээт"
           : "Бүгд";
       const sortLabel = sort === "duration" ? "Удаан зогссоноор" : sort === "amount" ? "Их төлбөрөөр" : "Сүүлд орсноор";
+      const filteredStats = registryStats(filtered);
+      const allStats = registryStats(records);
+      const sum = (source: RegistryRecord[], selector: (record: RegistryRecord) => number) => source.reduce((total, record) => total + selector(record), 0);
+      const exportValue = (record: RegistryRecord, index: number) => {
+        const cell = record.cells[index];
+        return cell?.link ?? (cell?.raw !== null && cell?.raw !== undefined && cell.raw !== "" ? cell.raw : cell?.display ?? "");
+      };
+      const exportRows = (source: RegistryRecord[]) => source.map((record) => ({
+        "Шалгалтын төлөв": recordStatus(record).label,
+        "Машины ангилал": vehicleType(record).label,
+        ...Object.fromEntries(report.columns.map((column, index) => [column, exportValue(record, index)])),
+      }));
+      const breakdown = (source: RegistryRecord[], label: (record: RegistryRecord) => string) => {
+        const groups = new Map<string, RegistryRecord[]>();
+        source.forEach((record) => {
+          const key = label(record) || "Тодорхойгүй";
+          groups.set(key, [...(groups.get(key) ?? []), record]);
+        });
+        return [...groups.entries()].map(([name, group]) => ({
+          "Нэр": name,
+          "Нийт бүртгэл": group.length,
+          "Цагийн": group.filter(isHourlyRecord).length,
+          "Гэрээт": group.filter(isContractRecord).length,
+          "Төлсөн бүртгэл": group.filter((record) => record.paidAmount > 0).length,
+          "Тооцоолсон дүн": sum(group, (record) => record.calculatedAmount),
+          "Төлөх дүн": sum(group, (record) => record.dueAmount),
+          "Төлсөн дүн": sum(group, (record) => record.paidAmount),
+          "Хөнгөлөлт": sum(group, (record) => record.discountAmount),
+          "Дундаж минут": group.length ? Math.round(sum(group, (record) => record.minutes) / group.length) : 0,
+        })).sort((a, b) => Number(b["Нийт бүртгэл"]) - Number(a["Нийт бүртгэл"]));
+      };
+      const recordDate = (record: RegistryRecord) => {
+        const parsed = new Date(record.enteredAt.includes(" ") ? record.enteredAt.replace(" ", "T") : record.enteredAt);
+        if (Number.isNaN(parsed.getTime())) return record.enteredAt.split(" ")[0] || "Огноогүй";
+        return `${parsed.getFullYear()}-${String(parsed.getMonth() + 1).padStart(2, "0")}-${String(parsed.getDate()).padStart(2, "0")}`;
+      };
+      const appendJsonSheet = (name: string, rows: Array<Record<string, string | number | boolean>>) => {
+        const sheet = XLSX.utils.json_to_sheet(rows);
+        const columns = rows[0] ? Object.keys(rows[0]) : [];
+        sheet["!cols"] = columns.map((column) => ({ wch: Math.min(42, Math.max(14, column.length + 2)) }));
+        if (sheet["!ref"]) sheet["!autofilter"] = { ref: sheet["!ref"] };
+        XLSX.utils.book_append_sheet(workbook, sheet, name);
+      };
       const summarySheet = XLSX.utils.aoa_to_sheet([
-        ["Parking шүүсэн тайлан"],
+        ["PARKING ДЭЛГЭРЭНГҮЙ ТАЙЛАН"],
         ["Эх файл", report.fileName],
         ["Үндсэн шүүлт", FILTER_LABELS[selectedFilter]],
         ["Машины төрөл", customerTypeLabel],
         ["Төлбөрийн төрөл", paymentType === "all" ? "Бүгд" : paymentType],
         ["Хайлт", query.trim() || "Байхгүй"],
         ["Эрэмбэ", sortLabel],
-        ["Нийт мөр", filtered.length],
         ["Татсан огноо", new Date().toLocaleString("mn-MN")],
+        [],
+        ["ҮНДСЭН ҮЗҮҮЛЭЛТ", "ШҮҮСЭН", "БҮХ БҮРТГЭЛ"],
+        ["Нийт мөр", filteredStats.totalVisits, allStats.totalVisits],
+        ["Цагийн төлбөртэй", filteredStats.hourlyVisits, allStats.hourlyVisits],
+        ["Гэрээт машин", filteredStats.contractVisits, allStats.contractVisits],
+        ["Төлбөр төлсөн", filteredStats.paidVisits, allStats.paidVisits],
+        ["30 мин хүрээгүй, төлбөргүй", filteredStats.freeUnder30, allStats.freeUnder30],
+        ["30+ мин, төлбөргүй", filteredStats.freeOver30, allStats.freeOver30],
+        ["Төлбөр бодогдсон ч төлөөгүй", filteredStats.expectedButUnpaid, allStats.expectedButUnpaid],
+        ["Гараар оруулсан", filteredStats.manualEntries, allStats.manualEntries],
+        ["Гараар гаргасан", filteredStats.manualExits, allStats.manualExits],
+        ["Дугаар зассан", filteredStats.plateCorrections, allStats.plateCorrections],
+        ["Зураг дутуу", filteredStats.missingExitImage, allStats.missingExitImage],
+        ["Гараагүй бүртгэл", filteredStats.openVisits, allStats.openVisits],
+        ["Давхардсан гүйлгээ", filteredStats.duplicateTransactions, allStats.duplicateTransactions],
+        ["Дундаж зогссон минут", filteredStats.averageMinutes, allStats.averageMinutes],
+        [],
+        ["МӨНГӨН ДҮН", "ШҮҮСЭН", "БҮХ БҮРТГЭЛ"],
+        ["Тооцоолсон дүн", sum(filtered, (record) => record.calculatedAmount), sum(records, (record) => record.calculatedAmount)],
+        ["Төлөх дүн", sum(filtered, (record) => record.dueAmount), sum(records, (record) => record.dueAmount)],
+        ["Төлсөн дүн", sum(filtered, (record) => record.paidAmount), sum(records, (record) => record.paidAmount)],
+        ["Хөнгөлөлт", sum(filtered, (record) => record.discountAmount), sum(records, (record) => record.discountAmount)],
+        ["Тооцоолсон - төлсөн зөрүү", sum(filtered, (record) => record.calculatedAmount - record.paidAmount), sum(records, (record) => record.calculatedAmount - record.paidAmount)],
+        [],
+        ["МАШИНЫ ТӨРЛИЙН ЗАДАРГАА", "БҮРТГЭЛ", "ТООЦООЛСОН", "ТӨЛСӨН"],
+        ...breakdown(filtered, (record) => vehicleType(record).label).map((row) => [row["Нэр"], row["Нийт бүртгэл"], row["Тооцоолсон дүн"], row["Төлсөн дүн"]]),
+        [],
+        ["ТӨЛВИЙН ЗАДАРГАА", "БҮРТГЭЛ", "ТООЦООЛСОН", "ТӨЛСӨН"],
+        ...breakdown(filtered, (record) => recordStatus(record).label).map((row) => [row["Нэр"], row["Нийт бүртгэл"], row["Тооцоолсон дүн"], row["Төлсөн дүн"]]),
       ]);
-      summarySheet["!cols"] = [{ wch: 22 }, { wch: 46 }];
-
-      const rows = filtered.map((record) => {
-        const sourceValues = Object.fromEntries(report.columns.map((column, index) => {
-          const cell = record.cells[index];
-          const value = cell?.link ?? (cell?.raw !== null && cell?.raw !== undefined && cell.raw !== "" ? cell.raw : cell?.display ?? "");
-          return [column, value];
-        }));
-        return {
-          "Шалгалтын төлөв": recordStatus(record).label,
-          "Машины ангилал": vehicleType(record).label,
-          ...sourceValues,
-        };
-      });
-      const registrySheet = XLSX.utils.json_to_sheet(rows);
-      registrySheet["!cols"] = Object.keys(rows[0]).map((column) => ({
-        wch: Math.min(42, Math.max(12, column.length + 2)),
-      }));
-      XLSX.utils.book_append_sheet(workbook, summarySheet, "Товч мэдээлэл");
-      XLSX.utils.book_append_sheet(workbook, registrySheet, "Шүүсэн бүртгэл");
+      summarySheet["!cols"] = [{ wch: 34 }, { wch: 22 }, { wch: 22 }, { wch: 18 }];
+      XLSX.utils.book_append_sheet(workbook, summarySheet, "Дэлгэрэнгүй нэгтгэл");
+      appendJsonSheet("Өдрийн задаргаа", breakdown(filtered, recordDate));
+      appendJsonSheet("Төлбөрийн задаргаа", breakdown(filtered, (record) => record.paymentType || "Төлбөргүй"));
+      appendJsonSheet("Кассчны задаргаа", breakdown(filtered, (record) => record.cashier || "Систем"));
+      appendJsonSheet("Байршлын задаргаа", breakdown(filtered, (record) => [record.parking, record.zone].filter(Boolean).join(" / ") || "Тодорхойгүй"));
+      appendJsonSheet("Шүүсэн бүртгэл", exportRows(filtered));
+      appendJsonSheet("Бүх бүртгэл", exportRows(records));
 
       const baseName = report.fileName.replace(/\.xlsx?$/i, "").replace(/[\\/:*?"<>|]/g, "-");
-      XLSX.writeFile(workbook, `${baseName}-шүүсэн-${filtered.length}.xlsx`);
+      XLSX.writeFile(workbook, `${baseName}-дэлгэрэнгүй-${filtered.length}.xlsx`);
     } finally {
       setIsExporting(false);
     }
