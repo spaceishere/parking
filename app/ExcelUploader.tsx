@@ -348,6 +348,25 @@ function RegistryTable({
         if (sheet["!ref"]) sheet["!autofilter"] = { ref: sheet["!ref"] };
         XLSX.utils.book_append_sheet(workbook, sheet, name);
       };
+      const registryHeaderRow = 6;
+      const originalRegistrySheet = XLSX.utils.aoa_to_sheet([
+        [report.title || "Нийт бүртгэл тайлан"],
+        ["Эхлэх огноо", report.startDate],
+        ["Дуусах огноо", report.endDate],
+        ["Нийт мөр", records.length],
+        [],
+        report.columns,
+        ...records.map((record) => report.columns.map((_, index) => exportValue(record, index))),
+      ]);
+      originalRegistrySheet["!cols"] = report.columns.map((column) => ({
+        wch: Math.min(42, Math.max(14, column.length + 2)),
+      }));
+      if (report.columns.length) {
+        const lastColumn = XLSX.utils.encode_col(report.columns.length - 1);
+        originalRegistrySheet["!autofilter"] = { ref: `A${registryHeaderRow}:${lastColumn}${registryHeaderRow + records.length}` };
+      }
+      XLSX.utils.book_append_sheet(workbook, originalRegistrySheet, "Нийт бүртгэл тайлан");
+
       const summarySheet = XLSX.utils.aoa_to_sheet([
         ["PARKING ДЭЛГЭРЭНГҮЙ ТАЙЛАН"],
         ["Эх файл", report.fileName],
@@ -394,10 +413,9 @@ function RegistryTable({
       appendJsonSheet("Кассчны задаргаа", breakdown(filtered, (record) => record.cashier || "Систем"));
       appendJsonSheet("Байршлын задаргаа", breakdown(filtered, (record) => [record.parking, record.zone].filter(Boolean).join(" / ") || "Тодорхойгүй"));
       appendJsonSheet("Шүүсэн бүртгэл", exportRows(filtered));
-      appendJsonSheet("Бүх бүртгэл", exportRows(records));
 
       const baseName = report.fileName.replace(/\.xlsx?$/i, "").replace(/[\\/:*?"<>|]/g, "-");
-      XLSX.writeFile(workbook, `${baseName}-дэлгэрэнгүй-${filtered.length}.xlsx`);
+      XLSX.writeFile(workbook, `${baseName}-нийт-бүртгэл.xlsx`);
     } finally {
       setIsExporting(false);
     }
