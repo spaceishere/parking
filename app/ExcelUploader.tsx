@@ -353,17 +353,17 @@ function RegistryTable({
         [report.title || "Нийт бүртгэл тайлан"],
         ["Эхлэх огноо", report.startDate],
         ["Дуусах огноо", report.endDate],
-        ["Нийт мөр", records.length],
+        ["Нийт мөр", filtered.length],
         [],
         report.columns,
-        ...records.map((record) => report.columns.map((_, index) => exportValue(record, index))),
+        ...filtered.map((record) => report.columns.map((_, index) => exportValue(record, index))),
       ]);
       originalRegistrySheet["!cols"] = report.columns.map((column) => ({
         wch: Math.min(42, Math.max(14, column.length + 2)),
       }));
       if (report.columns.length) {
         const lastColumn = XLSX.utils.encode_col(report.columns.length - 1);
-        originalRegistrySheet["!autofilter"] = { ref: `A${registryHeaderRow}:${lastColumn}${registryHeaderRow + records.length}` };
+        originalRegistrySheet["!autofilter"] = { ref: `A${registryHeaderRow}:${lastColumn}${registryHeaderRow + filtered.length}` };
       }
       XLSX.utils.book_append_sheet(workbook, originalRegistrySheet, "Нийт бүртгэл тайлан");
 
@@ -415,7 +415,7 @@ function RegistryTable({
       appendJsonSheet("Шүүсэн бүртгэл", exportRows(filtered));
 
       const baseName = report.fileName.replace(/\.xlsx?$/i, "").replace(/[\\/:*?"<>|]/g, "-");
-      XLSX.writeFile(workbook, `${baseName}-нийт-бүртгэл.xlsx`);
+      XLSX.writeFile(workbook, `${baseName}-нийт-бүртгэл-${filtered.length}.xlsx`);
     } finally {
       setIsExporting(false);
     }
