@@ -631,6 +631,18 @@ button.metric-card:hover,
   font-weight: 700;
 }
 
+.section-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.export-button {
+  min-height: 34px;
+  padding: 0 11px;
+  font-size: 11px;
+}
+
 .filterbar {
   margin-bottom: 10px;
   display: grid;
@@ -1900,6 +1912,17 @@ tbody tr:hover td {
     align-items: flex-start;
     flex-direction: column;
     gap: 8px;
+  }
+
+  .section-actions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .export-button {
+    width: auto;
+    padding: 0 11px;
+    font-size: 11px;
   }
 
   .pagination {

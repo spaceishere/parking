@@ -12,6 +12,7 @@ import {
   ChevronDown,
   CircleAlert,
   Clock3,
+  Download,
   ExternalLink,
   Eye,
   FileCheck2,
@@ -247,6 +248,7 @@ function RegistryTable({
   const [paymentType, setPaymentType] = useState("all");
   const [sort, setSort] = useState<SortKey>("newest");
   const [page, setPage] = useState(1);
+  const [isExporting, setIsExporting] = useState(false);
   const paymentTypes = useMemo(
     () => [...new Set(records.map((record) => record.paymentType).filter(meaningful))].sort(),
     [records],
@@ -290,6 +292,58 @@ function RegistryTable({
   const safePage = Math.min(page, pageCount);
   const pageRows = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
 
+  const exportFilteredRows = async () => {
+    if (!filtered.length || isExporting) return;
+    setIsExporting(true);
+    try {
+      const xlsxModule = await import("xlsx");
+      const XLSX = (xlsxModule.default ?? xlsxModule) as typeof import("xlsx");
+      const workbook = XLSX.utils.book_new();
+      const customerTypeLabel = effectiveCustomerType === "hourly"
+        ? "Цагийн төлбөртэй"
+        : effectiveCustomerType === "contract"
+          ? "Гэрээт"
+          : "Бүгд";
+      const sortLabel = sort === "duration" ? "Удаан зогссоноор" : sort === "amount" ? "Их төлбөрөөр" : "Сүүлд орсноор";
+      const summarySheet = XLSX.utils.aoa_to_sheet([
+        ["Parking шүүсэн тайлан"],
+        ["Эх файл", report.fileName],
+        ["Үндсэн шүүлт", FILTER_LABELS[selectedFilter]],
+        ["Машины төрөл", customerTypeLabel],
+        ["Төлбөрийн төрөл", paymentType === "all" ? "Бүгд" : paymentType],
+        ["Хайлт", query.trim() || "Байхгүй"],
+        ["Эрэмбэ", sortLabel],
+        ["Нийт мөр", filtered.length],
+        ["Татсан огноо", new Date().toLocaleString("mn-MN")],
+      ]);
+      summarySheet["!cols"] = [{ wch: 22 }, { wch: 46 }];
+
+      const rows = filtered.map((record) => {
+        const sourceValues = Object.fromEntries(report.columns.map((column, index) => {
+          const cell = record.cells[index];
+          const value = cell?.link ?? (cell?.raw !== null && cell?.raw !== undefined && cell.raw !== "" ? cell.raw : cell?.display ?? "");
+          return [column, value];
+        }));
+        return {
+          "Шалгалтын төлөв": recordStatus(record).label,
+          "Машины ангилал": vehicleType(record).label,
+          ...sourceValues,
+        };
+      });
+      const registrySheet = XLSX.utils.json_to_sheet(rows);
+      registrySheet["!cols"] = Object.keys(rows[0]).map((column) => ({
+        wch: Math.min(42, Math.max(12, column.length + 2)),
+      }));
+      XLSX.utils.book_append_sheet(workbook, summarySheet, "Товч мэдээлэл");
+      XLSX.utils.book_append_sheet(workbook, registrySheet, "Шүүсэн бүртгэл");
+
+      const baseName = report.fileName.replace(/\.xlsx?$/i, "").replace(/[\\/:*?"<>|]/g, "-");
+      XLSX.writeFile(workbook, `${baseName}-шүүсэн-${filtered.length}.xlsx`);
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   return (
     <section className="data-section">
       <div className="section-title-row">
@@ -297,7 +351,12 @@ function RegistryTable({
           <p className="eyebrow">МАШИНЫ ЖАГСААЛТ</p>
           <h2>{FILTER_LABELS[selectedFilter]}</h2>
         </div>
-        <span className="result-count">{formatCount(filtered.length)} бүртгэл</span>
+        <div className="section-actions">
+          <span className="result-count">{formatCount(filtered.length)} бүртгэл</span>
+          <button className="secondary-button export-button" type="button" disabled={!filtered.length || isExporting} onClick={() => void exportFilteredRows()}>
+            <Download size={16} />{isExporting ? "Бэлтгэж байна" : "Excel татах"}
+          </button>
+        </div>
       </div>
 
       <div className="filterbar">
